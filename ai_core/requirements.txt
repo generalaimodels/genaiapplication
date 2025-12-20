@@ -1,0 +1,49 @@
+# =============================================================================
+# AI_CORE DEPENDENCIES
+# =============================================================================
+# Production-ready dependencies for the Advanced Chatbot Core AI system.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CORE LLM LIBRARIES - Multi-Provider Support
+# -----------------------------------------------------------------------------
+litellm>=1.50.0          # Unified LLM API supporting 100+ providers
+openai>=1.50.0           # OpenAI SDK (also used for VLLM compatibility)
+anthropic>=0.40.0        # Anthropic Claude SDK
+google-generativeai>=0.8.0  # Google Gemini SDK
+
+# -----------------------------------------------------------------------------
+# DATA VALIDATION & SETTINGS
+# -----------------------------------------------------------------------------
+pydantic>=2.9.0          # Type-safe data validation
+pydantic-settings>=2.6.0 # Settings management with env support
+
+# -----------------------------------------------------------------------------
+# HTTP & ASYNC
+# -----------------------------------------------------------------------------
+httpx>=0.27.0            # Modern async HTTP client
+aiofiles>=24.1.0         # Async file operations
+
+# -----------------------------------------------------------------------------
+# RETRY & RESILIENCE
+# -----------------------------------------------------------------------------
+tenacity>=9.0.0          # Production-grade retry logic
+
+# -----------------------------------------------------------------------------
+# CONFIGURATION
+# -----------------------------------------------------------------------------
+python-dotenv>=1.0.0     # Environment variable loading
+
+# -----------------------------------------------------------------------------
+# TOKEN COUNTING
+# -----------------------------------------------------------------------------
+tiktoken>=0.8.0          # Accurate token counting for OpenAI models
+
+# -----------------------------------------------------------------------------
+# OPTIONAL: DOCUMENT PROCESSING
+# -----------------------------------------------------------------------------
+# Uncomment these for extended document support:
+# pypdf>=5.0.0           # PDF processing
+# python-docx>=1.1.0     # Word documents
+# langchain>=0.3.0       # Extended LangChain features
+# langchain-openai>=0.2.0  # LangChain OpenAI integration
