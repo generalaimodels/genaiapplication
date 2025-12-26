@@ -1,0 +1,146 @@
+# ==============================================================================
+# DOCKER COMPOSE - Multi-Database Backend System
+# ==============================================================================
+# Complete development environment with all database options
+# Includes: App, PostgreSQL, MongoDB, Redis
+# ==============================================================================
+
+version: "3.9"
+
+services:
+  # ----------------------------------------------------------------------------
+  # APPLICATION SERVICE
+  # ----------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: fastapi_app
+    ports:
+      - "8000:8000"
+    environment:
+      # Application Settings
+      - APP_NAME=Generalized Database System
+      - APP_VERSION=1.0.0
+      - DEBUG=true
+      - ENVIRONMENT=development
+      
+      # Database Selection (sqlite, postgresql, mongodb)
+      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
+      
+      # PostgreSQL Configuration
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=app_user
+      - POSTGRES_PASSWORD=app_password
+      - POSTGRES_DB=app_db
+      
+      # MongoDB Configuration
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB=app_db
+      
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379/0
+      
+      # Security
+      - SECRET_KEY=development-secret-key-change-in-production
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    volumes:
+      # Hot reload for development
+      - ./app:/app/app:ro
+    networks:
+      - backend_network
+    restart: unless-stopped
+    # Development command with hot reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ----------------------------------------------------------------------------
+  # POSTGRESQL DATABASE
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: app_password
+      POSTGRES_DB: app_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - backend_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_user -d app_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # MONGODB DATABASE
+  # ----------------------------------------------------------------------------
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - backend_network
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # REDIS CACHE
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+
+# ------------------------------------------------------------------------------
+# NETWORKS
+# ------------------------------------------------------------------------------
+networks:
+  backend_network:
+    driver: bridge
+    name: backend_network
+
+# ------------------------------------------------------------------------------
+# VOLUMES
+# ------------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    name: postgres_data
+  mongodb_data:
+    name: mongodb_data
+  mongodb_config:
+    name: mongodb_config
+  redis_data:
+    name: redis_data
