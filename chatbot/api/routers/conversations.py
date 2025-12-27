@@ -32,7 +32,6 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from api.schemas import (
-    ContextRequest,
     ContextResponse,
     HistoryEntry,
     HistoryListResponse,
@@ -42,6 +41,7 @@ from api.schemas import (
     SessionListResponse,
     SessionUpdate,
     ContextChunk,
+    FeedbackRequest,
 )
 from api.exceptions import NotFoundError, ValidationError, assert_found
 from api.dependencies import (
@@ -334,6 +334,36 @@ async def add_message(
         _LOG.warning("Failed to add to chat history engine: %s", e)
     
     return HistoryEntry(**entry)
+
+
+@router.post(
+    "/{session_id}/messages/{message_id}/feedback",
+    response_model=HistoryEntry,
+    summary="Submit Feedback",
+    description="Submit user feedback (like/dislike) for a specific message.",
+)
+async def submit_feedback(
+    session_id: str,
+    message_id: str,
+    request: FeedbackRequest,
+    sessions: SessionRepository = Depends(get_session_repo),
+    history_repo: HistoryRepository = Depends(get_history_repo),
+) -> HistoryEntry:
+    """Submit feedback for a message."""
+    # Verify session exists
+    await assert_found(await sessions.get(session_id), "Session", session_id)
+    
+    # Update feedback
+    updated = await history_repo.update_feedback(
+        history_id=message_id,
+        score=request.score,
+        comment=request.comment,
+    )
+    
+    if not updated:
+        raise NotFoundError("Message", message_id)
+        
+    return HistoryEntry(**updated)
 
 
 # =============================================================================

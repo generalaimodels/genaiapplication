@@ -9,4 +9,5 @@ __all__ = [
     "documents",
     "search",
     "generation",
+    "rag",
 ]

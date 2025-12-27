@@ -153,12 +153,24 @@ CREATE TABLE IF NOT EXISTS documents (
     file_size INTEGER,                            -- Size in bytes
     file_hash TEXT,                               -- SHA-256 hash for dedup
     status TEXT NOT NULL DEFAULT 'pending',       -- pending/processing/completed/failed
+    stage TEXT NOT NULL DEFAULT 'pending',        -- pending/converting/chunking/indexing/completed/failed
+    progress INTEGER NOT NULL DEFAULT 0,          -- Processing progress (0-100)
     chunk_count INTEGER DEFAULT 0,                -- Number of chunks created
     metadata TEXT DEFAULT '{}',                   -- JSON: processing options
     error TEXT,                                   -- Error message if failed
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL,
     is_active INTEGER NOT NULL DEFAULT 1
+);
+
+-- Users: User accounts for authentication
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,                          -- UUID v4
+    username TEXT NOT NULL UNIQUE,                -- Unique username (lowercase)
+    password_hash TEXT NOT NULL,                  -- SHA256 hashed password
+    created_at REAL NOT NULL,                     -- Unix timestamp
+    updated_at REAL NOT NULL,                     -- Unix timestamp
+    is_active INTEGER NOT NULL DEFAULT 1          -- Soft delete flag
 );
 
 -- =============================================================================
@@ -183,6 +195,9 @@ CREATE INDEX IF NOT EXISTS idx_responses_created_at ON responses(created_at);
 CREATE INDEX IF NOT EXISTS idx_documents_file_hash ON documents(file_hash);
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
 CREATE INDEX IF NOT EXISTS idx_documents_is_active ON documents(is_active);
+
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
 """.strip()
 
 
@@ -279,11 +294,28 @@ class DatabaseManager:
         """
         # Check thread-local connection first
         if hasattr(self._local, "conn") and self._local.conn is not None:
-            return self._local.conn
-        
+            try:
+                # Validate thread-local connection
+                self._local.conn.execute("SELECT 1")
+                return self._local.conn
+            except (sqlite3.ProgrammingError, sqlite3.OperationalError):
+                # Connection stale or closed, clear it
+                self._local.conn = None
+
         with self._lock:
-            if self._connections:
+            while self._connections:
                 conn = self._connections.pop()
+                try:
+                    # Verify connection is still open
+                    conn.execute("SELECT 1")
+                    break
+                except (sqlite3.ProgrammingError, sqlite3.OperationalError):
+                    # Connection closed, discard and try next
+                    try:
+                        conn.close()
+                    except:
+                        pass
+                    continue
             else:
                 conn = self._create_connection()
         
@@ -388,6 +420,19 @@ class DatabaseManager:
         try:
             # Execute schema creation (executescript handles its own transactions)
             cursor.executescript(SCHEMA_SQL)
+            
+            # Migration: Add new columns if they don't exist (for existing databases)
+            # Check for stage column
+            cursor.execute("PRAGMA table_info(documents)")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            if 'stage' not in columns:
+                cursor.execute("ALTER TABLE documents ADD COLUMN stage TEXT NOT NULL DEFAULT 'pending'")
+                _LOG.info("Added 'stage' column to documents table")
+            
+            if 'progress' not in columns:
+                cursor.execute("ALTER TABLE documents ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
+                _LOG.info("Added 'progress' column to documents table")
             
             # Insert or update schema version
             cursor.execute("""
@@ -786,30 +831,68 @@ class HistoryRepository:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """Update history entry with answer (for async response patterns)."""
-        now = now_timestamp()
-        
-        # Build dynamic update
         updates = ["answer = ?", "updated_at = ?"]
-        params: List[Any] = [answer, now]
+        params = [answer, now_timestamp()]
         
         if tokens_answer is not None:
             updates.append("tokens_answer = ?")
             params.append(tokens_answer)
+            
         if latency_ms is not None:
             updates.append("latency_ms = ?")
             params.append(latency_ms)
-        if metadata is not None:
-            updates.append("metadata = ?")
-            params.append(json.dumps(metadata))
+            
+        if metadata:
+            # Merge with existing metadata
+            current = await self.get(history_id)
+            if current:
+                merged = {**current.get("metadata", {}), **metadata}
+                updates.append("metadata = ?")
+                params.append(json.dumps(merged))
         
         params.append(history_id)
         
-        await self._db.execute(
-            f"UPDATE history SET {', '.join(updates)} WHERE id = ?",
-            tuple(params)
-        )
+        query = f"""
+            UPDATE history
+            SET {', '.join(updates)}
+            WHERE id = ?
+        """
         
-        return await self.get(history_id)
+        async with self._db.transaction():
+            await self._db.execute(query, tuple(params))
+            return await self.get(history_id)
+
+    async def update_feedback(
+        self,
+        history_id: str,
+        score: int,
+        comment: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Update feedback for a history entry."""
+        # Get current metadata
+        current = await self.get(history_id)
+        if not current:
+            return None
+            
+        metadata = current.get("metadata", {})
+        metadata["feedback"] = {
+            "score": score,
+            "comment": comment,
+            "timestamp": now_timestamp()
+        }
+        
+        query = """
+            UPDATE history
+            SET metadata = ?, updated_at = ?
+            WHERE id = ?
+        """
+        
+        async with self._db.transaction():
+            await self._db.execute(
+                query, 
+                (json.dumps(metadata), now_timestamp(), history_id)
+            )
+            return await self.get(history_id)
 
 
 class ResponseRepository:
@@ -931,19 +1014,87 @@ class DocumentRepository:
         row["is_active"] = bool(row.get("is_active", 1))
         return row
     
+    async def get_by_hash(self, file_hash: str) -> Optional[Dict[str, Any]]:
+        """
+        Get document by file hash.
+        
+        Used for duplicate detection. Returns the most recent active document
+        with this hash.
+        """
+        rows = await self._db.execute(
+            """
+            SELECT * FROM documents 
+            WHERE file_hash = ? AND is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (file_hash,),
+            fetch=True
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        row["metadata"] = json.loads(row.get("metadata") or "{}")
+        row["is_active"] = bool(row.get("is_active", 1))
+        return row
+    
+    async def list(self, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+        """List documents with pagination."""
+        # Get documents
+        rows = await self._db.execute(
+            """
+            SELECT * FROM documents 
+            WHERE is_active = 1 AND status != 'deleted'
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+            fetch=True
+        )
+        
+        # Parse metadata and fix types
+        documents = []
+        for row in rows:
+            row_dict = dict(row)
+            row_dict["metadata"] = json.loads(row_dict.get("metadata") or "{}")
+            row_dict["is_active"] = bool(row_dict.get("is_active", 1))
+            documents.append(row_dict)
+            
+        # Get total count
+        count_rows = await self._db.execute(
+            "SELECT COUNT(*) as count FROM documents WHERE is_active = 1 AND status != 'deleted'",
+            fetch=True
+        )
+        total = count_rows[0]["count"] if count_rows else 0
+        
+        return {
+            "documents": documents,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+    
     async def update_status(
         self,
         doc_id: str,
         status: str,
+        stage: Optional[str] = None,
+        progress: Optional[int] = None,
         chunk_count: Optional[int] = None,
         error: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Update document processing status."""
+        """Update document processing status with detailed progress tracking."""
         now = now_timestamp()
         
         updates = ["status = ?", "updated_at = ?"]
         params: List[Any] = [status, now]
         
+        if stage is not None:
+            updates.append("stage = ?")
+            params.append(stage)
+        if progress is not None:
+            updates.append("progress = ?")
+            params.append(progress)
         if chunk_count is not None:
             updates.append("chunk_count = ?")
             params.append(chunk_count)

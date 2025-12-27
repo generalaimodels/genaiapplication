@@ -37,6 +37,7 @@ import types
 import random
 import struct
 import hashlib
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -1010,6 +1011,37 @@ class VectorBase:
                 })
             contexts.append({"topk": ctx_items})
         return results, contexts
+
+    def save(self, path: str) -> None:
+        """Save the entire collection to disk."""
+        if self.collection is None:
+            raise RuntimeError("No collection to save")
+        _LOG = logging.getLogger("torchvectorbase")
+        _LOG.info("Saving vector base to %s", path)
+        try:
+            torch.save(self.collection, path)
+            _LOG.info("Saved successfully")
+        except Exception as e:
+            _LOG.error("Failed to save vector base: %s", e)
+            raise
+
+    def load(self, path: str) -> None:
+        """Load the entire collection from disk."""
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File not found: {path}")
+        _LOG = logging.getLogger("torchvectorbase")
+        _LOG.info("Loading vector base from %s", path)
+        try:
+            # Load to CPU first to avoid GPU mapping issues if device changed
+            self.collection = torch.load(path, map_location=self.device)
+            # Ensure runtime device alignment
+            self.collection.device = self.device
+            if self.collection.filters:
+                self.collection.filters.device = self.device
+            _LOG.info("Loaded successfully: %d records", self.collection.size)
+        except Exception as e:
+            _LOG.error("Failed to load vector base: %s", e)
+            raise
 
 
 # -------------------------------

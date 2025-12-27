@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend Service (FastAPI)
+  # ---------------------------------------------------------------------------
+  backend:
+    build: .
+    container_name: cca_backend_dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - /app/__pycache__
+      - /app/.venv
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Assuming vLLM is running on host
+      - LLM_BASE_URL=http://host.docker.internal:8007/v1
+      - DB_PATH=/app/data/api.db
+      - HIP_VISIBLE_DEVICES=5
+      - CUDA_VISIBLE_DEVICES=5
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - cca_network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Frontend Service (React/Vite)
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: node:20-alpine
+    container_name: cca_frontend_dev
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+    command: sh -c "npm install && npm run dev"
+    networks:
+      - cca_network
+    depends_on:
+      - backend
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  cca_network:
+    driver: bridge

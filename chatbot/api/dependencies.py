@@ -198,11 +198,12 @@ def get_embedding_adapter() -> Any:
             from torchvectorbase import EmbeddingAdapter
             
             settings = get_settings()
-            device = settings.device or ("cuda" if torch.cuda.is_available() else "cpu")
+            # Force CPU to avoid "No HIP GPUs are available" in docker container without passthrough
+            device = "cpu" 
             
             hf_embeddings = HuggingFaceEmbeddings(
                 model_name=settings.embed_model,
-                model_kwargs={"device": device},
+                model_kwargs={"device": device, "trust_remote_code": True},
             )
             
             _embedding_adapter_instance = EmbeddingAdapter(
@@ -223,19 +224,23 @@ def get_embedding_adapter() -> Any:
 
 def get_vector_base() -> Any:
     """
-    Get VectorBase singleton.
+    Get VectorBase singleton with loaded document chunks.
     
-    Initializes vector index for semantic search.
+    Initializes vector index for semantic search and loads
+    any existing chunks from the processed directory.
     """
     global _vector_base_instance
     if _vector_base_instance is None:
         try:
             import torch
+            import json
+            from pathlib import Path
             from torchvectorbase import VectorBase
             
             settings = get_settings()
             emb = get_embedding_adapter()
-            device = settings.device or ("cuda" if torch.cuda.is_available() else "cpu")
+            # Force CPU for vector operations as well
+            device = "cpu"
             
             _vector_base_instance = VectorBase(
                 emb,
@@ -244,6 +249,101 @@ def get_vector_base() -> Any:
                 device=device,
             )
             _LOG.info("Vector base initialized: dim=%d, device=%s", settings.embed_dim, device)
+            
+            # Persistence Path
+            store_path = settings.data_dir / "vector_store.pt"
+            
+            # Try loading existing index first
+            loaded = False
+            if store_path.exists():
+                try:
+                    _vector_base_instance.load(str(store_path))
+                    loaded = True
+                except Exception as e:
+                    _LOG.warning("Failed to load vector store from disk: %s", e)
+            
+            if not loaded:
+                # -------------------------------------------------------------------------
+                # Load existing chunks from JSONL files into vector base
+                # -------------------------------------------------------------------------
+                processed_dir = settings.data_dir / "uploads" / "processed"
+                if processed_dir.exists():
+                    jsonl_files = list(processed_dir.glob("*_chunks.jsonl"))
+                    if jsonl_files:
+                        _LOG.info("Loading %d chunk files into vector base...", len(jsonl_files))
+                        
+                        all_records = []
+                        for jsonl_file in jsonl_files:
+                            try:
+                                with open(jsonl_file, "r", encoding="utf-8") as f:
+                                    for line in f:
+                                        line = line.strip()
+                                        if line:
+                                            record = json.loads(line)
+                                            # Ensure required fields exist
+                                            if "text" in record and record["text"]:
+                                                all_records.append({
+                                                    "doc_id": record.get("doc_id", str(jsonl_file.stem)),
+                                                    "index": record.get("index", 0),
+                                                    "text": record["text"],
+                                                    "start": record.get("start", 0),
+                                                    "end": record.get("end", 0),
+                                                    "hash64": record.get("hash64", 0),
+                                                })
+                            except Exception as e:
+                                _LOG.warning("Failed to load chunks from %s: %s", jsonl_file, e)
+                        
+                        if all_records:
+                            _LOG.info("Loaded %d chunks, creating collection and indexing...", len(all_records))
+                            
+                            # Create collection and insert records
+                            try:
+                                _vector_base_instance.create_collection(
+                                    settings.default_collection,
+                                    dim=settings.embed_dim,
+                                    metric="cosine",
+                                )
+                                
+                                # Insert records (this embeds and indexes them)
+                                inserted_ids, stats = _vector_base_instance.insert(
+                                    all_records,
+                                    return_stats=True,
+                                )
+                                _LOG.info(
+                                    "Vector base loaded: total=%d, embedded=%d, inserted=%d",
+                                    stats.get("total", 0),
+                                    stats.get("embedded", 0),
+                                    stats.get("inserted", 0),
+                                )
+                                
+                                # Build IVF index for fast search if enough records
+                                if len(inserted_ids) >= 10:
+                                    try:
+                                        from torchvectorbase import IVFBuildParams
+                                        nlist = min(max(1, len(inserted_ids) // 4), 4096)
+                                        _vector_base_instance.build_index(
+                                            kind="IVF_PQ",
+                                            params=IVFBuildParams(nlist=nlist, pq_m=16),
+                                        )
+                                        _LOG.info("Vector index built: nlist=%d", nlist)
+                                    except Exception as idx_err:
+                                        _LOG.warning("Failed to build IVF index: %s", idx_err)
+                                
+                                # Save to disk for future fast startup
+                                try:
+                                    _vector_base_instance.save(str(store_path))
+                                except Exception as save_err:
+                                    _LOG.error("Failed to save vector store: %s", save_err)
+                                        
+                            except Exception as insert_err:
+                                _LOG.error("Failed to insert records: %s", insert_err)
+                        else:
+                            _LOG.info("No valid chunks found in JSONL files")
+                    else:
+                        _LOG.info("No chunk files found in processed directory")
+                else:
+                    _LOG.debug("Processed directory does not exist: %s", processed_dir)
+                
         except ImportError as e:
             _LOG.warning("Vector base not available: %s", e)
             raise HTTPException(

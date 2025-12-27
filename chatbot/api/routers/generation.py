@@ -275,43 +275,123 @@ async def chat_completion(
 async def chat_stream(
     request: ChatRequest,
     sessions: SessionRepository = Depends(get_session_repo),
+    history_repo: HistoryRepository = Depends(get_history_repo),
 ) -> StreamingResponse:
-    """Stream chat response as SSE."""
+    """Stream chat response as SSE with real LLM token streaming."""
     
     async def generate_sse() -> AsyncGenerator[str, None]:
         """Generate SSE events for streaming response."""
         start_time = time.perf_counter()
         settings = get_settings()
         full_response = ""
+        history_id = None
         
         try:
+            # Get or create session
+            session_id = request.session_id
+            if session_id:
+                session = await sessions.get(session_id)
+                if session is None:
+                    yield f"data: {json.dumps({'error': 'Session not found', 'done': True})}\n\n"
+                    return
+            else:
+                session = await sessions.create()
+                session_id = session["id"]
+            
+            # Fetch history context (last 10 turns)
+            # We fetch BEFORE creating the new entry to avoid self-inclusion or duplicates
+            past_history = []
+            if session_id:
+                entries = await history_repo.list_by_session(session_id, limit=10)
+                # Entries are typically recent-first, so we reverse
+                for entry in reversed(entries):
+                    past_history.append({"role": "user", "content": entry["query"]})
+                    if entry["answer"]:
+                        past_history.append({"role": "assistant", "content": entry["answer"]})
+
+            # Save user message to history
+            query_tokens = max(1, len(request.message) // 4)
+            history_entry = await history_repo.create(
+                session_id=session_id,
+                query=request.message,
+                role="user",
+                tokens_query=query_tokens,
+            )
+            history_id = history_entry["id"]
+            
             # Get LLM client
             llm = get_llm_client()
             
-            # Build prompt (simplified for streaming)
+            # Build prompt
             system_prompt = request.system_prompt or _get_default_system_prompt()
             
-            # For now, get full response and simulate streaming
-            # Real streaming would require vLLM streaming API
-            result = await llm.chat(
+            # Build context if enabled
+            context_text = ""
+            if request.include_context:
+                try:
+                    vector_base = get_vector_base()
+                    if hasattr(vector_base, 'collection') and vector_base.collection is not None:
+                        coll = vector_base.collection
+                        try:
+                            from rethinker_retrieval import Rethinker, RethinkerParams
+                            params = RethinkerParams(top_nodes_final=5)
+                            rethinker = Rethinker(vector_base, params)
+                            result = rethinker.search(request.message)
+                            contexts = result.get("contexts", [])
+                            for ctx in contexts[:5]:
+                                context_text += ctx.get("text", "") + "\n\n"
+                        except ImportError:
+                            if hasattr(vector_base, 'search'):
+                                results, ctx_raw = vector_base.search(request.message, k=5)
+                                if results and len(results) > 0:
+                                    for doc_id, _ in results[0]:
+                                        if hasattr(coll, 'texts') and 0 <= doc_id < len(coll.texts):
+                                            context_text += coll.texts[doc_id] + "\n\n"
+                except Exception as e:
+                    _LOG.debug("Context retrieval failed for streaming: %s", e)
+            
+            user_prompt = request.message
+            if context_text:
+                user_prompt = f"Context:\n{context_text}\n\nQuestion: {request.message}"
+            
+            # Prepare conversation messages
+            # [System, History..., User(Latest)]
+            # We use extra_messages for all content to preserve order if supported, 
+            # or rely on llm_client implementation.
+            # vllm_generation.py appends extra_messages AFTER system/user prompts.
+            # To get [History, Latest], we pass Latest IN extra_messages.
+            # So user_prompt=None, extra_messages=past_history + [{"role": "user", "content": user_prompt}]
+            
+            full_messages = past_history + [{"role": "user", "content": user_prompt}]
+
+            # Stream tokens from LLM
+            effective_max_tokens = request.max_tokens or settings.llm_max_tokens or 4096
+            
+            async for token in llm.chat_stream(
                 system_prompt=system_prompt,
-                user_prompt=request.message,
+                user_prompt=None, # Set to None to allow extra_messages to handle full flow
+                extra_messages=full_messages,
                 temperature=request.temperature,
-                max_tokens=request.max_tokens,
-            )
-            
-            full_response = result.content
-            
-            # Simulate token streaming
-            words = full_response.split()
-            for i, word in enumerate(words):
-                token = word + (" " if i < len(words) - 1 else "")
+                max_tokens=effective_max_tokens,
+                model=request.model,
+            ):
+                full_response += token
                 yield f"data: {json.dumps({'token': token, 'done': False})}\n\n"
-                await asyncio.sleep(0.02)  # Small delay for streaming effect
             
             # Send completion event
             latency_ms = (time.perf_counter() - start_time) * 1000
-            yield f"data: {json.dumps({'token': '', 'done': True, 'response': {'message': full_response, 'latency_ms': latency_ms}})}\n\n"
+            
+            # Save answer to history
+            if history_id and full_response:
+                answer_tokens = max(1, len(full_response) // 4)
+                await history_repo.update_answer(
+                    history_id=history_id,
+                    answer=full_response,
+                    tokens_answer=answer_tokens,
+                    latency_ms=latency_ms,
+                )
+            
+            yield f"data: {json.dumps({'token': '', 'done': True, 'response': {'message': full_response, 'latency_ms': latency_ms, 'model': request.model or settings.llm_model, 'session_id': session_id}})}\n\n"
             
         except Exception as e:
             _LOG.error("Streaming error: %s", e)
@@ -323,7 +403,7 @@ async def chat_stream(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering
+            "X-Accel-Buffering": "no",
         },
     )
 

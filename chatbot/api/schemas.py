@@ -205,6 +205,14 @@ class HistoryListResponse(BaseSchema):
 # Chat/Generation Schemas
 # =============================================================================
 
+class FeedbackRequest(BaseSchema):
+    """
+    Request model for message feedback.
+    """
+    score: int = Field(description="Feedback score: 1 (like) or -1 (dislike).", ge=-1, le=1)
+    comment: Optional[str] = Field(default=None, description="Optional feedback comment.")
+
+
 class ChatRequest(BaseSchema):
     """
     Request model for chat completion.
@@ -390,14 +398,33 @@ class DocumentUploadResponse(BaseSchema):
 
 
 class DocumentStatus(BaseSchema):
-    """Document processing status."""
+    """Document processing status with detailed progress tracking."""
     id: str
     filename: str
     status: Literal["pending", "processing", "completed", "failed"]
+    stage: Literal["pending", "converting", "chunking", "indexing", "completed", "failed"] = Field(
+        default="pending",
+        description="Current processing stage for detailed progress."
+    )
+    progress: int = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="Processing progress percentage (0-100)."
+    )
     chunk_count: int = Field(default=0)
+    file_size: Optional[int] = Field(default=None, description="File size in bytes.")
     error: Optional[str] = None
     created_at: float
     updated_at: float
+
+
+class DocumentListResponse(BaseSchema):
+    """Paginated list of documents."""
+    documents: List[DocumentStatus]
+    total: int
+    limit: int
+    offset: int
 
 
 class ChunkTextRequest(BaseSchema):
@@ -422,6 +449,29 @@ class ChunkTextResponse(BaseSchema):
     doc_id: str
     chunks: List[ChunkResult]
     total_chunks: int
+
+
+class ChunkingStatusResponse(BaseSchema):
+    """
+    Response for chunking status check.
+    
+    Returned by:
+    ------------
+    GET /api/v1/documents/{doc_id}/chunking-status
+    
+    Fields:
+    -------
+    - doc_id: Unique document identifier
+    - is_chunked: True if JSONL chunks file exists
+    - chunk_count: Number of chunks generated (0 if not chunked)
+    - chunks_file: Absolute path to the JSONL chunks file
+    - status: Current document processing status
+    """
+    doc_id: str = Field(description="Document ID.")
+    is_chunked: bool = Field(description="True if chunking is complete.")
+    chunk_count: int = Field(default=0, description="Number of chunks generated.")
+    chunks_file: Optional[str] = Field(default=None, description="Path to JSONL chunks file.")
+    status: str = Field(description="Document processing status.")
 
 
 # =============================================================================

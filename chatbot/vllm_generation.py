@@ -265,11 +265,23 @@ class LLMClient:
         raw = await self._bounded_retry_wait(_invoke, timeout_s=eff_timeout_s)
         # Normalize result shape. Defensive checks ensure graceful failure if the backend schema changes.
         try:
-            content = raw.choices[0].message["content"] if isinstance(raw.choices[0].message, dict) else raw.choices[0].message.content
+            msg = raw.choices[0].message
+            if isinstance(msg, dict):
+                content = msg.get("content") or ""
+            else:
+                content = getattr(msg, 'content', None) or ""
+            
+            # Log warning if content is empty (may indicate max_tokens too low)
+            if not content:
+                logger.warning(
+                    "LLM returned empty content. max_tokens=%s, finish_reason=%s",
+                    eff_max_tokens,
+                    getattr(raw.choices[0], 'finish_reason', 'unknown') if raw.choices else 'no_choice'
+                )
         except Exception as ex:
             raise LLMClientError(f"Unexpected response schema for chat completion: {ex}") from ex
 
-        return ChatResult(content=content or "", raw=raw)
+        return ChatResult(content=content, raw=raw)
 
     async def complete(
         self,
@@ -441,6 +453,88 @@ class LLMClient:
         """
         async with self._semaphore:
             return await fn()
+
+    # -------------------------------------------------------------------------
+    # Streaming Chat Method
+    # -------------------------------------------------------------------------
+    async def chat_stream(
+        self,
+        *,
+        system_prompt: Optional[str] = None,
+        user_prompt: Optional[str] = None,
+        system_template: Optional[PromptTemplate] = None,
+        user_template: Optional[PromptTemplate] = None,
+        template_vars: Optional[Dict[str, Any]] = None,
+        extra_messages: Optional[List[Dict[str, str]]] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        model: Optional[str] = None,
+    ):
+        """
+        Stream chat completion tokens as an async generator.
+
+        Yields:
+        -------
+        - str: Individual content tokens/chunks as they arrive from the LLM.
+
+        Parameters:
+        -----------
+        Same as chat() method. See chat() docstring for details.
+
+        Usage:
+        ------
+            async for token in llm.chat_stream(user_prompt="Hello"):
+                print(token, end="", flush=True)
+        """
+        messages: List[Dict[str, str]] = []
+        tv = template_vars or {}
+
+        # Strict template rendering if templates are provided.
+        if system_template is not None:
+            system_prompt = system_template.render(tv)
+        if user_template is not None:
+            user_prompt = user_template.render(tv)
+
+        # Compose messages in valid order.
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        if user_prompt:
+            messages.append({"role": "user", "content": user_prompt})
+        if extra_messages:
+            for m in extra_messages:
+                if not isinstance(m, dict) or "role" not in m or "content" not in m:
+                    raise LLMClientError("Each extra message must be a dict with 'role' and 'content' keys.")
+            messages.extend(extra_messages)
+
+        if not messages:
+            raise LLMClientError("At least one message is required to perform a chat completion.")
+
+        # Effective parameters
+        eff_temperature = self._cfg.temperature if temperature is None else float(temperature)
+        eff_max_tokens = self._cfg.max_tokens if max_tokens is None else int(max_tokens)
+        eff_model = self._cfg.model if model is None else str(model)
+
+        # Acquire semaphore for bounded concurrency
+        async with self._semaphore:
+            try:
+                stream = await self._client.chat.completions.create(
+                    model=eff_model,
+                    messages=messages,
+                    temperature=eff_temperature,
+                    stream=True,
+                    **({"max_tokens": eff_max_tokens} if eff_max_tokens is not None else {}),
+                )
+                async for chunk in stream:
+                    # Extract content delta from OpenAI streaming response
+                    if chunk.choices and len(chunk.choices) > 0:
+                        delta = chunk.choices[0].delta
+                        if delta:
+                            # Yield actual content tokens
+                            if hasattr(delta, 'content') and delta.content:
+                                yield delta.content
+            except Exception as e:
+                logger.error("Streaming error: %s", e)
+                raise LLMClientError(f"Streaming failed: {e}") from e
 
     async def _bounded_retry_wait(self, fn: Callable[[], Awaitable[T]], *, timeout_s: float) -> T:
         """

@@ -1,0 +1,328 @@
+/* =============================================================================
+   App.css — Refined Desktop Layout with Clean Design
+   ============================================================================= */
+
+/* Reset & Root */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --sidebar-width: 280px;
+    --header-height: 60px;
+    --input-area-height: 120px;
+}
+
+/* -----------------------------------------------------------------------------
+ * App Container — Refined Background
+ * -------------------------------------------------------------------------- */
+.app {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    background: var(--color-bg-primary, #0f0f14);
+    transition: background 0.3s ease;
+}
+
+[data-theme="light"] .app {
+    background: #fafafa;
+}
+
+/* -----------------------------------------------------------------------------
+ * Main Content — Properly Spaced for Fixed Header
+ * -------------------------------------------------------------------------- */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    margin-left: var(--sidebar-width);
+    /* Add padding for fixed header */
+    padding-top: var(--header-height);
+    transition: margin-left 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* When sidebar is collapsed */
+.sidebar-collapsed~.main-content {
+    margin-left: 72px;
+}
+
+/* -----------------------------------------------------------------------------
+ * Chat Container — Full Height with Proper Spacing
+ * -------------------------------------------------------------------------- */
+.chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    /* Ensure content doesn't get cut off */
+    min-height: 0;
+}
+
+/* Mode Toggle */
+.mode-toggle {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 10;
+}
+
+.mode-btn {
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--color-text-secondary, #a8a8b8);
+}
+
+.mode-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.mode-btn.active {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: white;
+    border-color: transparent;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+[data-theme="light"] .mode-btn {
+    background: #ffffff;
+    border-color: #e5e5e5;
+    color: #52525b;
+}
+
+[data-theme="light"] .mode-btn:hover {
+    background: #f5f5f5;
+}
+
+/* Error Banner */
+.error-banner {
+    padding: 12px 20px;
+    background: rgba(248, 113, 113, 0.1);
+    color: #f87171;
+    font-size: 14px;
+    border-bottom: 1px solid rgba(248, 113, 113, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+[data-theme="light"] .error-banner {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+
+/* -----------------------------------------------------------------------------
+ * Chat Scroll — Proper Scrollable Area
+ * -------------------------------------------------------------------------- */
+.chat-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 0;
+    /* Smooth scroll */
+    scroll-behavior: smooth;
+}
+
+/* -----------------------------------------------------------------------------
+ * Empty State — Premium Centered Welcome Card
+ * -------------------------------------------------------------------------- */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 60px 24px;
+    text-align: center;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.empty-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1));
+    border-radius: 20px;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.empty-state h2 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--color-text-primary, #f4f4f7);
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+}
+
+[data-theme="light"] .empty-state h2 {
+    color: #18181b;
+}
+
+.empty-state p {
+    font-size: 16px;
+    color: var(--color-text-tertiary, #6e6e80);
+    margin-bottom: 36px;
+    line-height: 1.5;
+}
+
+[data-theme="light"] .empty-state p {
+    color: #6b7280;
+}
+
+/* -----------------------------------------------------------------------------
+ * Quick Actions — Premium Card Grid
+ * -------------------------------------------------------------------------- */
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    width: 100%;
+    max-width: 560px;
+}
+
+.quick-actions button {
+    padding: 18px 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    color: var(--color-text-secondary, #a8a8b8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-align: center;
+    min-height: 56px;
+}
+
+.quick-actions button:hover {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.08));
+    border-color: rgba(99, 102, 241, 0.35);
+    color: var(--color-text-primary, #f4f4f7);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+}
+
+.quick-actions button:active {
+    transform: translateY(-1px);
+}
+
+[data-theme="light"] .quick-actions button {
+    background: #ffffff;
+    border-color: #e5e7eb;
+    color: #374151;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .quick-actions button:hover {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(139, 92, 246, 0.04));
+    border-color: #6366f1;
+    color: #18181b;
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.12);
+}
+
+/* Loading Skeleton */
+.loading-skeleton {
+    padding: 24px;
+}
+
+.skeleton-line {
+    height: 20px;
+    background: linear-gradient(90deg, #e5e5e5 25%, #f0f0f0 50%, #e5e5e5 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+    margin-bottom: 12px;
+}
+
+.skeleton-line.short {
+    width: 60%;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+[data-theme="dark"] .skeleton-line {
+    background: linear-gradient(90deg, #444654 25%, #565869 50%, #444654 75%);
+    background-size: 200% 100%;
+}
+
+/* Responsive - Mobile */
+@media (max-width: 768px) {
+    .main-content {
+        margin-left: 0;
+    }
+
+    .mode-toggle {
+        top: 8px;
+        right: 8px;
+    }
+
+    .mode-btn {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    .empty-state h2 {
+        font-size: 22px;
+    }
+
+    .quick-actions {
+        flex-direction: column;
+    }
+
+    .quick-actions button {
+        width: 100%;
+    }
+}
+
+/* Ensure messages are contained properly */
+.chat-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+
+.chat-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.chat-scroll::-webkit-scrollbar-thumb {
+    background: #c5c5d2;
+    border-radius: 4px;
+}
+
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+    background: #a8a8b8;
+}
+
+[data-theme="dark"] .chat-scroll::-webkit-scrollbar-thumb {
+    background: #565869;
+}
+
+[data-theme="dark"] .chat-scroll::-webkit-scrollbar-thumb:hover {
+    background: #6e6e80;
+}

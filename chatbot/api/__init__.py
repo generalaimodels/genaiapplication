@@ -35,7 +35,7 @@
 
 __version__ = "1.0.0"
 __api_version__ = "v1"
-__author__ = "CCA Chatbot Team"
+__author__ = "Chatbot Team"
 
 # -----------------------------------------------------------------------------
 # Minimal exports: defer heavy imports to actual usage sites.

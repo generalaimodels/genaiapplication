@@ -1,0 +1,196 @@
+/* =============================================================================
+ * ChatInput Component Styles
+ * =============================================================================
+ * Premium input styling featuring:
+ *   • Glassmorphism background
+ *   • Gradient send button
+ *   • Smooth transitions
+ *   • Focus glow effects
+ * ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+ * Container
+ * -------------------------------------------------------------------------- */
+.chat-input-container {
+    padding: var(--space-4) var(--space-6);
+    background: linear-gradient(to top,
+            var(--color-bg-primary) 0%,
+            transparent 100%);
+}
+
+/* -----------------------------------------------------------------------------
+ * Input Wrapper
+ * -------------------------------------------------------------------------- */
+.chat-input-wrapper {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-3);
+    max-width: var(--max-chat-width);
+    margin: 0 auto;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-xl);
+    transition: all var(--transition-smooth);
+}
+
+.chat-input-wrapper:focus-within {
+    border-color: var(--glass-border-active);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15), var(--shadow-glow);
+}
+
+/* -----------------------------------------------------------------------------
+ * Textarea
+ * -------------------------------------------------------------------------- */
+.chat-input {
+    flex: 1;
+    min-height: 24px;
+    max-height: 200px;
+    padding: var(--space-2) 0;
+    background: transparent;
+    border: none;
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-normal);
+    resize: none;
+    outline: none;
+    transition: height var(--transition-smooth);
+}
+
+.chat-input::placeholder {
+    color: var(--color-text-muted);
+}
+
+.chat-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* -----------------------------------------------------------------------------
+ * Actions
+ * -------------------------------------------------------------------------- */
+.chat-input-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding-bottom: var(--space-1);
+}
+
+/* -----------------------------------------------------------------------------
+ * Send Button
+ * -------------------------------------------------------------------------- */
+.btn-send {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: var(--gradient-accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: all var(--transition-smooth);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-send:hover:not(:disabled) {
+    transform: scale(1.05) translateY(-1px);
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+.btn-send:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+.btn-send:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-send svg {
+    transition: transform var(--transition-fast);
+}
+
+.btn-send:hover:not(:disabled) svg {
+    transform: translate(2px, -2px);
+}
+
+/* -----------------------------------------------------------------------------
+ * Cancel Button
+ * -------------------------------------------------------------------------- */
+.btn-cancel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: var(--color-accent-error);
+    color: white;
+    border: none;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: all var(--transition-smooth);
+    box-shadow: var(--shadow-md);
+    animation: pulseGlow 2s ease-in-out infinite;
+}
+
+.btn-cancel:hover {
+    transform: scale(1.05);
+    background: #dc2626;
+}
+
+/* -----------------------------------------------------------------------------
+ * Character Counter
+ * -------------------------------------------------------------------------- */
+.char-count {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    padding-right: var(--space-2);
+    animation: fadeIn var(--transition-fast) forwards;
+}
+
+.char-count-limit {
+    color: var(--color-accent-warning);
+}
+
+/* -----------------------------------------------------------------------------
+ * Hint
+ * -------------------------------------------------------------------------- */
+.chat-input-hint {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--space-2);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+.chat-input-hint kbd {
+    display: inline-block;
+    padding: 0.15em 0.4em;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--color-bg-tertiary);
+    border-radius: var(--radius-sm);
+    margin: 0 0.15em;
+}
+
+/* -----------------------------------------------------------------------------
+ * Responsive
+ * -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+    .chat-input-container {
+        padding: var(--space-3) var(--space-4);
+    }
+
+    .chat-input-wrapper {
+        border-radius: var(--radius-lg);
+        padding: var(--space-2) var(--space-3);
+    }
+
+    .chat-input-hint {
+        display: none;
+    }
+}

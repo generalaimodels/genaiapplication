@@ -1,0 +1,53 @@
+/* =============================================================================
+ * LoadingDots Component Styles
+ * ============================================================================= */
+
+.loading-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Size variants */
+.loading-dots-sm .loading-dot {
+    width: 6px;
+    height: 6px;
+}
+
+.loading-dots-md .loading-dot {
+    width: 8px;
+    height: 8px;
+}
+
+.loading-dots-lg .loading-dot {
+    width: 10px;
+    height: 10px;
+}
+
+/* Color variants */
+.loading-dots-primary .loading-dot {
+    background: var(--color-accent-primary);
+}
+
+.loading-dots-secondary .loading-dot {
+    background: var(--color-accent-secondary);
+}
+
+.loading-dots-muted .loading-dot {
+    background: var(--color-text-muted);
+}
+
+/* Dot styles */
+.loading-dot {
+    display: inline-block;
+    border-radius: 50%;
+    animation: typingDots 1.4s ease-in-out infinite;
+}
+
+.loading-dot:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.loading-dot:nth-child(3) {
+    animation-delay: 0.3s;
+}

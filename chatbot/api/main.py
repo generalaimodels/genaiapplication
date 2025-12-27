@@ -103,6 +103,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from api.dependencies import get_db_manager
         db_manager = get_db_manager()
         _LOG.info("Database initialized")
+
+        # Warmup RAG services in background (prevents 4-min latency on first query)
+        import asyncio
+        from api.dependencies import get_vector_base
+        
+        async def warmup_rag():
+            _LOG.info("Starting background RAG warmup...")
+            try:
+                # Run synchronous blocking initialization in thread pool
+                # This prevents blocking the asyncio event loop during heavy indexing
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, get_vector_base)
+                _LOG.info("RAG warmup complete - Vector Base ready")
+            except Exception as e:
+                _LOG.error("RAG warmup failed: %s", e)
+
+        asyncio.create_task(warmup_rag())
+
+        # Start advanced task manager for background processing
+        from api.task_manager import start_task_manager
+        await start_task_manager(max_workers=10, shutdown_timeout=30.0)
+        _LOG.info("Advanced task manager started")
         
         # Log startup time
         _LOG.info("Startup complete in %.2f seconds", time.time() - startup_time)
@@ -120,6 +142,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _LOG.info("Shutting down CCA Chatbot API...")
     
     try:
+        # Shutdown task manager first (waits for running tasks)
+        from api.task_manager import shutdown_task_manager
+        await shutdown_task_manager()
+        _LOG.info("Task manager shutdown complete")
+        
         from api.dependencies import cleanup_services
         await cleanup_services()
         _LOG.info("Cleanup complete")
@@ -199,16 +226,20 @@ Production-grade API integrating:
     register_middleware(app)
     
     # ----- Include Routers -----
-    from api.routers import health, conversations, documents, search, generation
+    from api.routers import health, conversations, documents, search, generation, rag, auth
     
     # Health endpoints (no prefix for Kubernetes probes)
     app.include_router(health.router, prefix=api_prefix)
+    
+    # Authentication router
+    app.include_router(auth.router, prefix=api_prefix)
     
     # Main API routers
     app.include_router(conversations.router, prefix=api_prefix)
     app.include_router(documents.router, prefix=api_prefix)
     app.include_router(search.router, prefix=api_prefix)
     app.include_router(generation.router, prefix=api_prefix)
+    app.include_router(rag.router, prefix=api_prefix)
     
     # ----- Root Endpoint -----
     @app.get("/", tags=["Root"])

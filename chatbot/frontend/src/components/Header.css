@@ -1,0 +1,176 @@
+/* =============================================================================
+ * Header Component Styles — Minimal ChatGPT Style
+ * =============================================================================
+ * Clean, minimal header with just session title and actions
+ * ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+ * Header Container
+ * -------------------------------------------------------------------------- */
+.header {
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-width);
+    right: 0;
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--space-6);
+    z-index: var(--z-sticky);
+    transition: left 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    background: var(--color-bg-primary, #0f0f14);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="light"] .header {
+    background: #fafafa;
+    border-bottom-color: rgba(0, 0, 0, 0.04);
+}
+
+/* When sidebar is collapsed */
+.sidebar-collapsed~.main-content .header {
+    left: 72px;
+}
+
+/* -----------------------------------------------------------------------------
+ * Brand / Session Title — Clean Minimal
+ * -------------------------------------------------------------------------- */
+.header-brand {
+    display: flex;
+    align-items: center;
+}
+
+.header-title-wrapper {
+    display: flex;
+    align-items: center;
+}
+
+.header-session-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary, #f4f4f7);
+    margin: 0;
+    max-width: 400px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+[data-theme="light"] .header-session-title {
+    color: #18181b;
+}
+
+.header-session-default {
+    color: var(--color-text-tertiary, #6e6e80);
+}
+
+[data-theme="light"] .header-session-default {
+    color: #a1a1aa;
+}
+
+/* -----------------------------------------------------------------------------
+ * Actions
+ * -------------------------------------------------------------------------- */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.header-action {
+    position: relative;
+}
+
+.header-action::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: var(--radius-md);
+    background: var(--gradient-accent);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+    z-index: -1;
+}
+
+.header-action:hover::before {
+    opacity: 0.1;
+}
+
+/* Theme toggle rotation animation */
+.theme-toggle svg {
+    transition: transform var(--transition-smooth);
+}
+
+.theme-toggle:hover svg {
+    transform: rotate(15deg);
+}
+
+/* -----------------------------------------------------------------------------
+ * User Info & Logout
+ * -------------------------------------------------------------------------- */
+.header-user {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: var(--space-2);
+    padding-left: var(--space-3);
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="light"] .header-user {
+    border-left-color: rgba(0, 0, 0, 0.08);
+}
+
+.header-username {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text-secondary, #a8a8b8);
+    max-width: 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+[data-theme="light"] .header-username {
+    color: #52525b;
+}
+
+.header-logout {
+    color: var(--color-text-muted, #4a4a5a);
+}
+
+.header-logout:hover {
+    color: var(--color-accent-error, #f87171);
+    background: rgba(248, 113, 113, 0.1);
+}
+
+/* -----------------------------------------------------------------------------
+ * Responsive
+ * -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+    .header {
+        left: 0;
+        padding: 0 var(--space-4);
+        padding-left: calc(var(--space-4) + 52px);
+        /* Space for mobile toggle */
+    }
+
+    .header-title {
+        font-size: var(--font-size-base);
+    }
+
+    .header-session-title {
+        display: none;
+    }
+
+    .header-username {
+        display: none;
+    }
+
+    .header-user {
+        border-left: none;
+        padding-left: 0;
+        margin-left: 0;
+    }
+}

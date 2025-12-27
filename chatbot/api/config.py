@@ -231,8 +231,9 @@ class Settings:
     llm_base_url: str = "http://localhost:8007/v1"
     llm_api_key: str = "EMPTY"               # NEVER log this value
     llm_model: str = "openai/gpt-oss-20b"
-    llm_temperature: float = 0.2
-    llm_max_tokens: int = 2048
+    llm_temperature: float = 0.7
+    llm_max_tokens: int = 8192  # Increased for fuller responses
+    llm_top_p: float = 0.95
     llm_timeout_s: float = 60.0              # Request timeout
     llm_max_retries: int = 3                 # Retry count on failure
     llm_max_concurrency: int = 8             # Bounded concurrent requests
@@ -382,7 +383,7 @@ def _load_settings() -> Settings:
         llm_api_key=get_val("LLM_API_KEY", "LLM_API_KEY", "EMPTY", str),
         llm_model=get_val("LLM_MODEL", "LLM_MODEL", "openai/gpt-oss-20b", str),
         llm_temperature=get_val("LLM_TEMPERATURE", "LLM_TEMPERATURE", 0.2, float),
-        llm_max_tokens=get_val("LLM_MAX_TOKENS", "LLM_MAX_TOKENS", 2048, int),
+        llm_max_tokens=get_val("LLM_MAX_TOKENS", "LLM_MAX_TOKENS", 8192, int),
         llm_timeout_s=get_val("LLM_TIMEOUT_S", "LLM_TIMEOUT_S", 60.0, float),
         llm_max_retries=get_val("LLM_MAX_RETRIES", "LLM_MAX_RETRIES", 3, int),
         llm_max_concurrency=get_val("LLM_MAX_CONCURRENCY", "LLM_MAX_CONCURRENCY", 8, int),
